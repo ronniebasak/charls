@@ -4,6 +4,7 @@
 #pragma once
 
 #include "jpegls_algorithm.hpp"
+#include "util.hpp"
 #include "assert.hpp"
 
 #include <cstdint>
@@ -98,9 +99,41 @@ public:
     FORCE_INLINE int32_t compute_golomb_coding_parameter() const
     {
         int32_t k{};
+        if (n_ << k >= a_)
+            return k;
+
+#ifndef CHARLS_NO_CLZ
+        // Optimized: Use CLZ
+        const int k_est{static_cast<int>(charls::countl_zero(static_cast<uint32_t>(n_))) -
+                        static_cast<int>(charls::countl_zero(static_cast<uint32_t>(a_)))};
+            
+        k = k_est;
+        if ((n_ << k) < a_)
+        {
+            ++k;
+        }
+#else
+        // Legacy: Iterative Loop
         for (; n_ << k < a_ && k < max_k_value; ++k)
         {
-            // Purpose of this loop is to calculate 'k', by design no content.
+        }
+#endif
+            
+        ASSERT(k <= max_k_value); 
+
+#ifdef CHARLS_NO_CLZ
+        // Verification loop for legacy path? No, just run it.
+        // Actually I should make sure the loop below doesn't run twice if I use goto or something.
+#endif
+
+        // The fallback loop (mostly for CLZ safety, or main loop for Legacy if I restructured)
+        // With CLZ, this loop runs 0 times.
+        // With Legacy, I put the loop in the #else block above.
+        // But wait, the original code had the loop *after* the CLZ block as a fallback.
+        // Let's structure it cleanly.
+        
+        for (; n_ << k < a_ && k < max_k_value; ++k)
+        {
         }
 
         if (UNLIKELY(k == max_k_value))
