@@ -5,6 +5,7 @@
 
 #include "color_transform.hpp"
 #include "scan_codec.hpp"
+#include "simd_util.hpp"
 
 #include <cstring>
 
@@ -115,6 +116,17 @@ private:
         auto* s{static_cast<const sample_type*>(source)};
         auto* d{static_cast<triplet<sample_type>*>(destination)};
         const size_t pixel_stride{pixel_count_to_pixel_stride(pixel_count)};
+
+        if constexpr (sizeof(sample_type) == 1)
+        {
+            simd_interleave::interleave_rgb_simd(
+                reinterpret_cast<const uint8_t*>(s),
+                reinterpret_cast<const uint8_t*>(s) + pixel_stride,
+                reinterpret_cast<const uint8_t*>(s) + 2 * pixel_stride,
+                reinterpret_cast<uint8_t*>(d),
+                pixel_count);
+            return;
+        }
 
         for (size_t i{}; i != pixel_count; ++i)
         {

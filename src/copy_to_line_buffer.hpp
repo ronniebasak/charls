@@ -8,6 +8,7 @@
 #include "simd_util.hpp"
 
 #include <cstring>
+#include <type_traits>
 
 
 // During encoding, CharLS processes one line at a time. The different implementations
@@ -139,6 +140,20 @@ private:
         const size_t pixel_stride{pixel_count_to_pixel_stride(pixel_count)};
         const auto m{static_cast<sample_type>(mask)};
 
+        if constexpr (sizeof(sample_type) == 1 || sizeof(sample_type) == 2)
+        {
+            if (mask == ((1 << (sizeof(sample_type) * 8)) - 1))
+            {
+                simd_interleave::deinterleave_rgb_simd(
+                    reinterpret_cast<const sample_type*>(s),
+                    d,
+                    d + pixel_stride,
+                    d + 2 * pixel_stride,
+                    pixel_count);
+                return;
+            }
+        }
+
         for (size_t i{}; i != pixel_count; ++i)
         {
             const auto pixel{s[i]};
@@ -149,10 +164,54 @@ private:
         }
     }
 
+
+    using simd_transform_fn = void (*)(const uint8_t* rgb_planar, uint8_t* output, size_t pixel_count, size_t stride) noexcept;
+
+    static void apply_simd_transform(const void* source, void* destination, const size_t pixel_count, void (*transform_fn)(const sample_type*, sample_type*, size_t, size_t) noexcept) noexcept
+    {
+        auto* s{static_cast<const triplet<sample_type>*>(source)};
+        auto* d{static_cast<sample_type*>(destination)};
+        const size_t pixel_stride{pixel_count_to_pixel_stride(pixel_count)};
+
+        // 1. Deinterleave to destination (Planar)
+        simd_interleave::deinterleave_rgb_simd(
+            reinterpret_cast<const sample_type*>(s),
+            d,
+            d + pixel_stride,
+            d + 2 * pixel_stride,
+            pixel_count);
+
+        // 2. Apply transform in-place
+        transform_fn(d, d, pixel_count, pixel_stride);
+    }
+
     template<typename Transform>
     static void copy_line_3_components_transform(const void* source, void* destination, const size_t pixel_count,
                                                  uint32_t /*mask*/) noexcept
     {
+        if constexpr (sizeof(sample_type) == 1 || sizeof(sample_type) == 2)
+        {
+            if constexpr (std::is_same_v<Transform, transform_hp1<sample_type>>)
+            {
+                apply_simd_transform(source, destination, pixel_count, &simd_color::transform_hp1_simd);
+                return;
+            }
+            else if constexpr (std::is_same_v<Transform, transform_hp2<sample_type>>)
+            {
+                apply_simd_transform(source, destination, pixel_count, &simd_color::transform_hp2_simd);
+                return;
+            }
+        }
+
+        if constexpr (sizeof(sample_type) == 1)
+        {
+            if constexpr (std::is_same_v<Transform, transform_hp3<sample_type>>)
+            {
+                apply_simd_transform(source, destination, pixel_count, &simd_color::transform_hp3_simd);
+                return;
+            }
+        }
+
         copy_line_3_components_transform_impl(source, destination, pixel_count, Transform{});
     }
 
