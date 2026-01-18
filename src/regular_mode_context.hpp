@@ -4,6 +4,7 @@
 #pragma once
 
 #include "jpegls_algorithm.hpp"
+#include "util.hpp"
 #include "assert.hpp"
 
 #include <cstdint>
@@ -93,14 +94,32 @@ public:
 
     /// <summary>
     /// Computes the Golomb coding parameter using the algorithm as defined in ISO 14495-1, code segment A.10
+    /// Optimized with CLZ (count leading zeros) for O(1) computation instead of O(k) loop.
     /// </summary>
     [[nodiscard]]
     FORCE_INLINE int32_t compute_golomb_coding_parameter() const
     {
         int32_t k{};
+        
+        // Early exit for common case
+        if (n_ << k >= a_)
+            return k;
+
+        // CLZ-based estimation: k ≈ floor(log2(a_)) - floor(log2(n_))
+        const int k_est{charls::countl_zero(static_cast<uint32_t>(n_)) -
+                        charls::countl_zero(static_cast<uint32_t>(a_))};
+        
+        k = k_est > 0 ? k_est : 0;
+        
+        // CLZ gives estimate, may need +1 adjustment
+        if ((n_ << k) < a_)
+        {
+            ++k;
+        }
+
+        // Safety verification loop (runs 0 times with correct CLZ)
         for (; n_ << k < a_ && k < max_k_value; ++k)
         {
-            // Purpose of this loop is to calculate 'k', by design no content.
         }
 
         if (UNLIKELY(k == max_k_value))
