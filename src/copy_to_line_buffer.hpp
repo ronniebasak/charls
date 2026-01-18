@@ -5,6 +5,7 @@
 
 #include "color_transform.hpp"
 #include "scan_codec.hpp"
+#include "simd_util.hpp"
 
 #include <cstring>
 
@@ -109,10 +110,8 @@ private:
         auto* d{static_cast<sample_type*>(destination)};
         const auto m{static_cast<sample_type>(mask)};
 
-        for (size_t i{}; i != pixel_count; ++i)
-        {
-            d[i] = static_cast<sample_type>(s[i] & m);
-        }
+        // Use SIMD-optimized masked copy when available
+        simd::copy_samples_masked_simd(s, d, pixel_count, m);
     }
 
     static void copy_line_2_components(const void* source, void* destination, const size_t pixel_count,
