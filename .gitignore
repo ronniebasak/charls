@@ -22,3 +22,4 @@ vcpkg_installed/
 
 # Ignore Coverity build folder
 cov-int/
+benchmark/bench_*
