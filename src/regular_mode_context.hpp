@@ -93,6 +93,57 @@ public:
     }
 
     /// <summary>
+    /// Optimized version of update_variables_and_bias for the case where error_value == 0.
+    /// This is common in MRI / Medical imaging (smooth 16-bit blocks).
+    /// </summary>
+    FORCE_INLINE void update_variables_and_bias_zero_error(const int32_t reset_threshold)
+    {
+        ASSERT(n_ != 0);
+
+        // a_ += 0; -> Optimized away
+        // b_ += 0; -> Optimized away
+
+        if (n_ == reset_threshold)
+        {
+            a_ >>= 1;
+            b_ >>= 1;
+            n_ >>= 1;
+        }
+
+        ++n_;
+
+        // Optimized bias update for b_ unchanged case
+        constexpr int32_t max_c{127};
+        constexpr int32_t min_c{-128};
+
+        if (b_ + n_ <= 0)
+        {
+            b_ += n_;
+            if (b_ <= -n_)
+            {
+                b_ = -n_ + 1;
+            }
+            if (c_ > min_c)
+            {
+                --c_;
+            }
+        }
+        else if (b_ > 0)
+        {
+            b_ -= n_;
+            if (b_ > 0)
+            {
+                b_ = 0;
+            }
+            if (c_ < max_c)
+            {
+                ++c_;
+            }
+        }
+        // else: b_ <= 0 && b_ + n_ > 0 -> stable state, no updates needed
+    }
+
+    /// <summary>
     /// Computes the Golomb coding parameter using the algorithm as defined in ISO 14495-1, code segment A.10
     /// Optimized with CLZ (count leading zeros) for O(1) computation instead of O(k) loop.
     /// </summary>
